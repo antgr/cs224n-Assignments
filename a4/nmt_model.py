@@ -77,7 +77,7 @@ class NMT(nn.Module):
         self.decoder = torch.nn.LSTM(input_size = embed_size + self.hidden_size, hidden_size = self.hidden_size)
         self.h_projection = torch.nn.Linear(in_features = 2*self.hidden_size, out_features = self.hidden_size, bias = False)
         self.c_projection = torch.nn.Linear(in_features = 2*self.hidden_size, out_features = self.hidden_size, bias = False)
-        self.att_projection = torch.nn.Linear(in_features = self.hidden_size, out_features = self.hidden_size, bias = False)
+        self.att_projection = torch.nn.Linear(in_features = 2*self.hidden_size, out_features = self.hidden_size, bias = False)
         self.combined_output_projection = torch.nn.Linear(in_features = 3*self.hidden_size, out_features = self.hidden_size, bias = False)
         self.target_vocab_projection = torch.nn.Linear(in_features = self.hidden_size, out_features = len(self.vocab.tgt), bias = False)
         self.dropout = torch.nn.Dropout(p=self.dropout_rate)
@@ -171,13 +171,16 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/tensors.html#torch.Tensor.permute
 
         X = self.model_embeddings.source(source_padded)
-        X_packed = pack_padded_sequence(X)
+        X_packed = pack_padded_sequence(X,source_lengths)
         encoder_hiddens, (h_n, c_n) = self.encoder(X_packed)
-        encoder_hiddens = pad_packed_sequence(encoder_hiddens)
-        #TODO swapping degli assi 
-        
-        
-        
+        #pad_packed_sequence retrns a tuple, see th documentation
+        encoder_hiddens, _ = pad_packed_sequence(encoder_hiddens)
+        enc_hiddens = encoder_hiddens.permute(1,0,2)
+        concatenated_tensors = torch.cat([h_n[0], h_n[1]],1)
+        init_decoder_hidden = self.h_projection(concatenated_tensors)
+        concatenated_tensors = torch.cat([c_n[0], c_n[1]],1)
+        init_decoder_cell = self.c_projection(concatenated_tensors)
+        dec_init_state = (init_decoder_hidden,init_decoder_cell)
         ### END YOUR CODE
 
         return enc_hiddens, dec_init_state
