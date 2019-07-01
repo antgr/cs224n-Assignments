@@ -17,7 +17,6 @@ import math
 import sys
 import pickle
 import time
-
 import numpy as np
 
 from docopt import docopt

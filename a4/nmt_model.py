@@ -250,7 +250,18 @@ class NMT(nn.Module):
         ###     Tensor Stacking:
         ###         https://pytorch.org/docs/stable/torch.html#torch.stack
 
-
+        enc_hiddens_proj = self.att_projection(enc_hiddens)
+        Y = self.model_embeddings.target(target_padded)
+       
+        to_iterate = torch.split(Y,1,dim=0) #returns a tuple of 1xbxh elements
+        for Y_t in to_iterate:
+            squeezed_Y_t = torch.squeeze(Y_t,dim=0)
+            Y_bar_t = torch.cat((squeezed_Y_t,o_prev),dim=1)
+            dec_state, o_t, _ = self.step(Y_bar_t, dec_state, enc_hiddens, enc_hiddens_proj, enc_masks)
+            combined_outputs.append(o_t)
+            o_prev = o_t
+             
+        combined_outputs = torch.stack(combined_outputs, dim=0)
         ### END YOUR CODE
 
         return combined_outputs
@@ -308,7 +319,9 @@ class NMT(nn.Module):
         ###     Tensor Squeeze:
         ###         https://pytorch.org/docs/stable/torch.html#torch.squeeze
 
-
+        dec_state = self.decoder(Ybar_t,dec_state)
+        dec_hidden, dec_cell = dec_state
+        e_t = enc_hiddens_proj.bmm(dec_hidden.unsqueeze(2)).squeeze(2)
         ### END YOUR CODE
 
         # Set e_t to -inf where enc_masks has 1
@@ -343,7 +356,12 @@ class NMT(nn.Module):
         ###     Tanh:
         ###         https://pytorch.org/docs/stable/torch.html#torch.tanh
 
-
+        alpha_t = softmax(e_t,dim=1)
+        a_t = alpha_t.unsqueeze(1).bmm(enc_hiddens).squeeze(1)
+        U_t = torch.cat((dec_hidden,a_t),dim=1)
+        V_t = self.combined_output_projection(U_t)
+        to_pass = torch.tanh(V_t)
+        O_t = self.dropout(to_pass)
         ### END YOUR CODE
 
         combined_output = O_t
