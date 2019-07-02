@@ -171,16 +171,14 @@ class NMT(nn.Module):
         ###         https://pytorch.org/docs/stable/tensors.html#torch.Tensor.permute
 
         X = self.model_embeddings.source(source_padded)
-        X_packed = pack_padded_sequence(X,source_lengths)
-        encoder_hiddens, (h_n, c_n) = self.encoder(X_packed)
-        #pad_packed_sequence retrns a tuple, see th documentation
-        encoder_hiddens, _ = pad_packed_sequence(encoder_hiddens)
-        enc_hiddens = encoder_hiddens.permute(1,0,2)
-        concatenated_tensors = torch.cat([h_n[0], h_n[1]],1)
-        init_decoder_hidden = self.h_projection(concatenated_tensors)
-        concatenated_tensors = torch.cat([c_n[0], c_n[1]],1)
-        init_decoder_cell = self.c_projection(concatenated_tensors)
-        dec_init_state = (init_decoder_hidden,init_decoder_cell)
+        enc_hiddens, (last_hidden, last_cell) = self.encoder(
+        pack_padded_sequence(X, source_lengths))
+        enc_hiddens = pad_packed_sequence(enc_hiddens, batch_first=True)[0]
+        last_hidden = torch.cat((last_hidden[0, :], last_hidden[1, :]), 1)
+        init_decoder_hidden = self.h_projection(last_hidden)
+        last_cell = torch.cat((last_cell[0, :], last_cell[1, :]), 1)
+        init_decoder_cell = self.c_projection(last_cell)
+        dec_init_state = (init_decoder_hidden, init_decoder_cell)
         ### END YOUR CODE
 
         return enc_hiddens, dec_init_state
@@ -319,10 +317,10 @@ class NMT(nn.Module):
         ###     Tensor Squeeze:
         ###         https://pytorch.org/docs/stable/torch.html#torch.squeeze
 
-        dec_state = self.decoder(Ybar_t,dec_state)
-        dec_hidden, dec_cell = dec_state
+        dec_state = self.decoder(Ybar_t, dec_state)
+        (dec_hidden, dec_cell) = dec_state
+        # 3, (b, src_len, h) .dot(b, h, 1) -> (b, src_len, 1) -> (b, src_len)
         e_t = enc_hiddens_proj.bmm(dec_hidden.unsqueeze(2)).squeeze(2)
-        ### END YOUR CODE
 
         # Set e_t to -inf where enc_masks has 1
         if enc_masks is not None:
